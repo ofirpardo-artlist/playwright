@@ -19,29 +19,41 @@ import path from 'path';
 import type { FullConfig, FullResult, Suite, TestCase } from '../../types/testReporter';
 import { monotonicTime } from 'playwright-core/lib/utils';
 import { formatFailure, stripAnsiEscapes } from './base';
-import { assert } from 'playwright-core/lib/utils';
 import EmptyReporter from './empty';
+
+type JUnitOptions = {
+  outputFile?: string,
+  stripANSIControlSequences?: boolean,
+  includeProjectInTestName?: boolean,
+
+  configDir?: string,
+};
 
 class JUnitReporter extends EmptyReporter {
   private config!: FullConfig;
+  private configDir: string;
   private suite!: Suite;
   private timestamp!: Date;
   private startTime!: number;
   private totalTests = 0;
   private totalFailures = 0;
   private totalSkipped = 0;
-  private outputFile: string | undefined;
   private resolvedOutputFile: string | undefined;
   private stripANSIControlSequences = false;
+  private includeProjectInTestName = false;
 
-  constructor(options: { outputFile?: string, stripANSIControlSequences?: boolean } = {}) {
+  constructor(options: JUnitOptions = {}) {
     super();
-    this.outputFile = options.outputFile || reportOutputNameFromEnv();
     this.stripANSIControlSequences = options.stripANSIControlSequences || false;
+    this.includeProjectInTestName = options.includeProjectInTestName || false;
+    this.configDir = options.configDir || '';
+    const outputFile = options.outputFile || reportOutputNameFromEnv();
+    if (outputFile)
+      this.resolvedOutputFile = path.resolve(this.configDir, outputFile);
   }
 
   override printsToStdio() {
-    return !this.outputFile;
+    return !this.resolvedOutputFile;
   }
 
   override onConfigure(config: FullConfig) {
@@ -52,10 +64,6 @@ class JUnitReporter extends EmptyReporter {
     this.suite = suite;
     this.timestamp = new Date();
     this.startTime = monotonicTime();
-    if (this.outputFile) {
-      assert(this.config.configFile || path.isAbsolute(this.outputFile), 'Expected fully resolved path if not using config file.');
-      this.resolvedOutputFile = this.config.configFile ? path.resolve(path.dirname(this.config.configFile), this.outputFile) : this.outputFile;
-    }
   }
 
   override async onEnd(result: FullResult) {
@@ -98,6 +106,7 @@ class JUnitReporter extends EmptyReporter {
     let failures = 0;
     let duration = 0;
     const children: XMLEntry[] = [];
+    const testCaseNamePrefix = projectName && this.includeProjectInTestName ? `[${projectName}] ` : '';
 
     for (const test of suite.allTests()){
       ++tests;
@@ -107,7 +116,7 @@ class JUnitReporter extends EmptyReporter {
         ++failures;
       for (const result of test.results)
         duration += result.duration;
-      await this._addTestCase(suite.title, test, children);
+      await this._addTestCase(suite.title, testCaseNamePrefix, test, children);
     }
 
     this.totalTests += tests;
@@ -132,12 +141,12 @@ class JUnitReporter extends EmptyReporter {
     return entry;
   }
 
-  private async _addTestCase(suiteName: string, test: TestCase, entries: XMLEntry[]) {
+  private async _addTestCase(suiteName: string, namePrefix: string, test: TestCase, entries: XMLEntry[]) {
     const entry = {
       name: 'testcase',
       attributes: {
         // Skip root, project, file
-        name: test.titlePath().slice(3).join(' › '),
+        name: namePrefix + test.titlePath().slice(3).join(' › '),
         // filename
         classname: suiteName,
         time: (test.results.reduce((acc, value) => acc + value.duration, 0)) / 1000
@@ -194,12 +203,12 @@ class JUnitReporter extends EmptyReporter {
         if (!attachment.path)
           continue;
 
-        let attachmentPath = path.relative(this.config.rootDir, attachment.path);
+        let attachmentPath = path.relative(this.configDir, attachment.path);
         try {
           if (this.resolvedOutputFile)
             attachmentPath = path.relative(path.dirname(this.resolvedOutputFile), attachment.path);
         } catch {
-          systemOut.push(`\nWarning: Unable to make attachment path ${attachment.path} relative to report output file ${this.outputFile}`);
+          systemOut.push(`\nWarning: Unable to make attachment path ${attachment.path} relative to report output file ${this.resolvedOutputFile}`);
         }
 
         try {

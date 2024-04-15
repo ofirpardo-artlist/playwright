@@ -17,6 +17,8 @@
 import type { TestServerInterface, TestServerInterfaceEvents } from '@testIsomorphic/testServerInterface';
 import * as events from './events';
 
+// -- Reuse boundary -- Everything below this line is reused in the vscode extension.
+
 export class TestServerConnection implements TestServerInterface, TestServerInterfaceEvents {
   readonly onClose: events.Event<void>;
   readonly onReport: events.Event<any>;
@@ -64,20 +66,13 @@ export class TestServerConnection implements TestServerInterface, TestServerInte
     });
     const pingInterval = setInterval(() => this._sendMessage('ping').catch(() => {}), 30000);
     this._connectedPromise = new Promise<void>((f, r) => {
-      this._ws.addEventListener('open', () => {
-        f();
-        this._ws.send(JSON.stringify({ id: -1, method: 'ready' }));
-      });
+      this._ws.addEventListener('open', () => f());
       this._ws.addEventListener('error', r);
     });
     this._ws.addEventListener('close', () => {
       this._onCloseEmitter.fire();
       clearInterval(pingInterval);
     });
-  }
-
-  connect() {
-    return this._connectedPromise;
   }
 
   private async _sendMessage(method: string, params?: any): Promise<any> {
@@ -110,8 +105,8 @@ export class TestServerConnection implements TestServerInterface, TestServerInte
       this._onLoadTraceRequestedEmitter.fire(params);
   }
 
-  async setSerializer(params: { serializer: string; }): Promise<void> {
-    await this._sendMessage('setSerializer', params);
+  async initialize(params: Parameters<TestServerInterface['initialize']>[0]): ReturnType<TestServerInterface['initialize']> {
+    await this._sendMessage('initialize', params);
   }
 
   async ping(params: Parameters<TestServerInterface['ping']>[0]): ReturnType<TestServerInterface['ping']> {
@@ -128,10 +123,6 @@ export class TestServerConnection implements TestServerInterface, TestServerInte
 
   watchNoReply(params: Parameters<TestServerInterface['watch']>[0]) {
     this._sendMessageNoReply('watch', params);
-  }
-
-  async watchTestDir(params: Parameters<TestServerInterface['watchTestDir']>[0]): ReturnType<TestServerInterface['watchTestDir']> {
-    await this._sendMessage('watchTestDir', params);
   }
 
   async open(params: Parameters<TestServerInterface['open']>[0]): ReturnType<TestServerInterface['open']> {
@@ -166,6 +157,18 @@ export class TestServerConnection implements TestServerInterface, TestServerInte
     return await this._sendMessage('runGlobalTeardown', params);
   }
 
+  async startDevServer(params: Parameters<TestServerInterface['startDevServer']>[0]): ReturnType<TestServerInterface['startDevServer']> {
+    return await this._sendMessage('startDevServer', params);
+  }
+
+  async stopDevServer(params: Parameters<TestServerInterface['stopDevServer']>[0]): ReturnType<TestServerInterface['stopDevServer']> {
+    return await this._sendMessage('stopDevServer', params);
+  }
+
+  async clearCache(params: Parameters<TestServerInterface['clearCache']>[0]): ReturnType<TestServerInterface['clearCache']> {
+    return await this._sendMessage('clearCache', params);
+  }
+
   async listFiles(params: Parameters<TestServerInterface['listFiles']>[0]): ReturnType<TestServerInterface['listFiles']> {
     return await this._sendMessage('listFiles', params);
   }
@@ -190,11 +193,14 @@ export class TestServerConnection implements TestServerInterface, TestServerInte
     this._sendMessageNoReply('stopTests', params);
   }
 
-  async setInterceptStdio(params: Parameters<TestServerInterface['setInterceptStdio']>[0]): ReturnType<TestServerInterface['setInterceptStdio']> {
-    await this._sendMessage('setInterceptStdio', params);
-  }
-
   async closeGracefully(params: Parameters<TestServerInterface['closeGracefully']>[0]): ReturnType<TestServerInterface['closeGracefully']> {
     await this._sendMessage('closeGracefully', params);
+  }
+
+  close() {
+    try {
+      this._ws.close();
+    } catch {
+    }
   }
 }

@@ -15,9 +15,11 @@
  */
 
 import type { Annotation } from '../common/config';
-import type { FullProject, Metadata } from '../../types/test';
+import type { Metadata } from '../../types/test';
 import type * as reporterTypes from '../../types/testReporter';
 import type { ReporterV2 } from '../reporters/reporterV2';
+
+// -- Reuse boundary -- Everything below this line is reused in the vscode extension.
 
 export type StringIntern = (s: string) => string;
 export type JsonLocation = reporterTypes.Location;
@@ -67,6 +69,7 @@ export type JsonTestCase = {
   retries: number;
   tags?: string[];
   repeatEachIndex: number;
+  annotations?: { type: string, description?: string }[];
 };
 
 export type JsonTestEnd = {
@@ -129,6 +132,7 @@ type TeleReporterReceiverOptions = {
 };
 
 export class TeleReporterReceiver {
+  public isListing = false;
   private _rootSuite: TeleSuite;
   private _options: TeleReporterReceiverOptions;
   private _reporter: Partial<ReporterV2>;
@@ -140,11 +144,6 @@ export class TeleReporterReceiver {
     this._rootSuite = new TeleSuite('', 'root');
     this._options = options;
     this._reporter = reporter;
-  }
-
-  reset() {
-    this._rootSuite._entries = [];
-    this._tests.clear();
   }
 
   dispatch(message: JsonEvent): Promise<void> | void {
@@ -207,6 +206,35 @@ export class TeleReporterReceiver {
     projectSuite._project = this._parseProject(project);
     for (const suite of project.suites)
       this._mergeSuiteInto(suite, projectSuite);
+
+    // Remove deleted tests when listing. Empty suites will be auto-filtered
+    // in the UI layer.
+    if (this.isListing) {
+      const testIds = new Set<string>();
+      const collectIds = (suite: JsonSuite) => {
+        suite.entries.forEach(entry => {
+          if ('testId' in entry)
+            testIds.add(entry.testId);
+          else
+            collectIds(entry);
+        });
+      };
+      project.suites.forEach(collectIds);
+
+      const filterTests = (suite: TeleSuite) => {
+        suite._entries = suite._entries.filter(entry => {
+          if (entry.type === 'test') {
+            if (testIds.has(entry.id))
+              return true;
+            this._tests.delete(entry.id);
+            return false;
+          }
+          filterTests(entry);
+          return true;
+        });
+      };
+      filterTests(projectSuite);
+    }
   }
 
   private _onBegin() {
@@ -364,6 +392,7 @@ export class TeleReporterReceiver {
     test.location = this._absoluteLocation(payload.location);
     test.retries = payload.retries;
     test.tags = payload.tags ?? [];
+    test.annotations = payload.annotations ?? [];
     return test;
   }
 
@@ -590,7 +619,7 @@ class TeleTestResult implements reporterTypes.TestResult {
   }
 }
 
-export type TeleFullProject = FullProject;
+export type TeleFullProject = reporterTypes.FullProject;
 
 export const baseFullConfig: reporterTypes.FullConfig = {
   forbidOnly: false,
