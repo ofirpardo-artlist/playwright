@@ -38,6 +38,7 @@ export type ConfigCLIOverrides = {
   workers?: number | string;
   projects?: { name: string, use?: any }[],
   use?: any;
+  timingFile: string | undefined;
 };
 
 export type SerializedConfig = {

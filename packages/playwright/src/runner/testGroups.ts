@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { JSONReport, JSONReportSuite, JSONReportTestResult } from 'packages/playwright-test/reporter';
 import type { Suite, TestCase } from '../common/test';
 
 export type TestGroup = {
@@ -23,6 +24,12 @@ export type TestGroup = {
   projectId: string;
   tests: TestCase[];
 };
+
+type testDetails = {
+  id: string,
+  name: string,
+  duration: number
+}
 
 export function createTestGroups(projectSuite: Suite, workers: number): TestGroup[] {
   // This function groups tests that can be run together.
@@ -160,5 +167,101 @@ export function filterForShard(shard: { total: number, current: number }, testGr
       result.add(group);
     current += group.tests.length;
   }
+  return result;
+}
+
+export function filterForShardFromTimingFile(timingFile: JSONReport, shard: { total: number, current: number }, testGroups: TestGroup[]): Set<TestGroup> {
+  // Note that sharding works based on test groups.
+  // This means parallel files will be sharded by single tests,
+  // while non-parallel files will be sharded by the whole file.
+  //
+  // Shards are still balanced by the number of tests, not files,
+  // even in the case of non-paralleled files.
+  const testDetails = getAllTestDetails(timingFile);
+  const shardsMapping = mapToShards(testDetails, shard);
+  const testIds = shardsMapping[shard.current - 1].map(shardDetails => shardDetails.id);
+  const recordedTests = testGroups.filter(group => testIds.includes(group.tests[0].id));
+  // console.log(shardsMapping);
+  // console.log(testDetails.length);
+  const result = new Set<TestGroup>();
+
+  recordedTests.forEach(group => result.add(group));
+
+  if (testDetails.length != testGroups.length) {
+    const allTestIds = testDetails.map(shardDetails => shardDetails.id);
+    const UnrecordedTests = testGroups.filter(group => !allTestIds.includes(group.tests[0].id));
+
+    let shardableTotal = 0;
+    for (const group of UnrecordedTests)
+      shardableTotal += group.tests.length;
+  
+    // Each shard gets some tests.
+    const shardSize = Math.floor(shardableTotal / shard.total);
+    // First few shards get one more test each.
+    const extraOne = shardableTotal - shardSize * shard.total;
+  
+    const currentShard = shard.current - 1; // Make it zero-based for calculations.
+    const from = shardSize * currentShard + Math.min(extraOne, currentShard);
+    const to = from + shardSize + (currentShard < extraOne ? 1 : 0);
+  
+    let current = 0;
+    for (const group of UnrecordedTests) {
+      // Any test group goes to the shard that contains the first test of this group.
+      // So, this shard gets any group that starts at [from; to)
+      if (current >= from && current < to)
+        result.add(group);
+      current += group.tests.length;
+    }
+  }
+  return result;
+}
+
+function getAllTestDetails(report: JSONReport) {
+  const allTestDetails:testDetails[] = [];
+  report.suites.forEach((suite: JSONReportSuite) => {
+    getTestDetails(suite, allTestDetails);
+  });
+
+  return allTestDetails;
+}
+
+function getTestDetails(suite: JSONReportSuite, allTestDetails: testDetails[]) {
+  if (suite.specs) {
+    suite.specs.forEach((spec) => {
+      spec.tests.forEach((test) => {
+        test.results.forEach((result) => {
+          allTestDetails.push({
+            id: spec.id,
+            name: spec.title,
+            duration: result.duration,
+          });
+        });
+      });
+    });
+  }
+
+  if (suite.suites) {
+    suite.suites.forEach((subSuite) => {
+      getTestDetails(subSuite, allTestDetails);
+    });
+  }
+}
+
+function mapToShards(testDetails: testDetails[], shard: {total: number, current: number}) {
+  testDetails.sort((a, b) => b.duration - a.duration);
+
+  const result:testDetails[][] = Array.from({ length: shard.total }, () => []);
+  const sums = Array(shard.total).fill(0);
+
+  for (let testDetailsObj of testDetails) {
+    let minIndex = sums.indexOf(Math.min(...sums));
+    result[minIndex].push(testDetailsObj);
+    sums[minIndex] += testDetailsObj.duration;
+  }
+
+  for (let i = 0; i < shard.total; i++) {
+    console.log(`Total duration for array ${i + 1}: ${sums[i]}`);
+  }
+
   return result;
 }

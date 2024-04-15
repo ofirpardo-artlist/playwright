@@ -186,6 +186,7 @@ async function runTests(args: string[], opts: { [key: string]: any }) {
   config.cliListOnly = !!opts.list;
   config.cliProjectFilter = opts.project || undefined;
   config.cliPassWithNoTests = !!opts.passWithNoTests;
+  config.timingFile = opts.timingFile;
 
   const runner = new Runner(config);
   let status: FullResult['status'];
@@ -275,6 +276,7 @@ function overridesFromOptions(options: { [key: string]: any }): ConfigCLIOverrid
     ignoreSnapshots: options.ignoreSnapshots ? !!options.ignoreSnapshots : undefined,
     updateSnapshots: options.updateSnapshots ? 'all' as const : undefined,
     workers: options.workers,
+    timingFile: options.timingFile,
   };
 
   if (options.browser) {
@@ -332,6 +334,7 @@ const testOptions: [string, string][] = [
   ['--fully-parallel', `Run all tests in parallel (default: false)`],
   ['--global-timeout <timeout>', `Maximum time this test suite can run in milliseconds (default: unlimited)`],
   ['-g, --grep <grep>', `Only run tests matching this regular expression (default: ".*")`],
+  ['--timing-file <file>', `Load shard balance from timing file`],
   ['-gv, --grep-invert <grep>', `Only run tests that do not match this regular expression`],
   ['--headed', `Run tests in headed browsers (default: headless)`],
   ['--ignore-snapshots', `Ignore screenshot and snapshot expectations`],

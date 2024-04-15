@@ -57,6 +57,7 @@ export class FullConfigInternal {
   cliPassWithNoTests?: boolean;
   testIdMatcher?: Matcher;
   defineConfigWasUsed = false;
+  timingFile: string | undefined;
 
   constructor(location: ConfigLocation, userConfig: Config, configCLIOverrides: ConfigCLIOverrides) {
     if (configCLIOverrides.projects && userConfig.projects)
