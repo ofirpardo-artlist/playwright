@@ -15,11 +15,12 @@
  */
 
 import path from 'path';
+import fs from 'fs';
 
 import { InProcessLoaderHost, OutOfProcessLoaderHost } from './loaderHost';
 import { createFileFiltersFromArguments, createFileMatcherFromArguments, createTitleMatcher, errorWithFile, forceRegExp } from '../util';
 import { buildProjectsClosure, collectFilesForProject, filterProjects } from './projectUtils';
-import {  createTestGroups, filterForShard } from './testGroups';
+import {  createTestGroups, filterForShard, filterForShardFromTimingFile } from './testGroups';
 import { applyRepeatEachIndex, bindFileSuiteToProject, filterByFocusedLine, filterByTestIds, filterOnly, filterTestsRemoveEmptySuites } from '../common/suiteUtils';
 import { Suite } from '../common/test';
 import { dependenciesForTestFile } from '../transform/compilationCache';
@@ -182,11 +183,17 @@ export async function createRootSuite(testRun: TestRun, errors: TestError[], sho
     for (const projectSuite of rootSuite.suites) {
       // Split beforeAll-grouped tests into "config.shard.total" groups when needed.
       // Later on, we'll re-split them between workers by using "config.workers" instead.
-      testGroups.push(...createTestGroups(projectSuite, config.config.shard.total));
+      testGroups.push(...createTestGroups(projectSuite, config.config.workers));
     }
 
     // Shard test groups.
-    const testGroupsInThisShard = filterForShard(config.config.shard, testGroups);
+    let testGroupsInThisShard;
+    if (config.cliTimingFile) {
+      const timingFile = JSON.parse(fs.readFileSync(config.configDir + config.cliTimingFile, 'utf8'));
+      testGroupsInThisShard = filterForShardFromTimingFile(timingFile, config.config.shard, testGroups);
+    } else {
+      testGroupsInThisShard = filterForShard(config.config.shard, testGroups);
+    }
     const testsInThisShard = new Set<TestCase>();
     for (const group of testGroupsInThisShard) {
       for (const test of group.tests)

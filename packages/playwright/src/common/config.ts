@@ -61,6 +61,7 @@ export class FullConfigInternal {
   testIdMatcher?: Matcher;
   lastFailedTestIdMatcher?: Matcher;
   defineConfigWasUsed = false;
+  cliTimingFile = undefined;
 
   globalSetups: string[] = [];
   globalTeardowns: string[] = [];

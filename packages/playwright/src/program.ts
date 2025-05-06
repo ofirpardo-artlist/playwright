@@ -172,6 +172,7 @@ async function runTests(args: string[], opts: { [key: string]: any }) {
   config.cliListOnly = !!opts.list;
   config.cliProjectFilter = opts.project || undefined;
   config.cliPassWithNoTests = !!opts.passWithNoTests;
+  config.cliTimingFile = opts.timingFile || undefined;
   config.cliLastFailed = !!opts.lastFailed;
 
   // Evaluate project filters against config before starting execution. This enables a consistent error message across run modes
@@ -407,6 +408,7 @@ const testOptions: [string, string][] = [
   ['--max-failures <N>', `Stop after the first N failures`],
   ['--no-deps', 'Do not run project dependencies'],
   ['--output <dir>', `Folder for output artifacts (default: "test-results")`],
+  ['--timing-file <file>', `Load JSON report to use as timing file for shard balancing`],
   ['--only-changed [ref]', `Only run test files that have been changed between 'HEAD' and 'ref'. Defaults to running all uncommitted changes. Only supports Git.`],
   ['--pass-with-no-tests', `Makes test run succeed even if no tests were found`],
   ['--project <project-name...>', `Only run tests from the specified list of projects, supports '*' wildcard (default: run all projects)`],

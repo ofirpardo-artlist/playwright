@@ -60,6 +60,7 @@ export class TestInfoImpl implements TestInfo {
   readonly _startWallTime: number;
   readonly _tracing: TestTracing;
   readonly _uniqueSymbol;
+  private _test?: TestCase;
 
   _wasInterrupted = false;
   _lastStepId = 0;
@@ -144,6 +145,7 @@ export class TestInfoImpl implements TestInfo {
     this._onStepBegin = onStepBegin;
     this._onStepEnd = onStepEnd;
     this._onAttach = onAttach;
+    this._test = test;
     this._startTime = monotonicTime();
     this._startWallTime = Date.now();
     this._requireFile = test?._requireFile ?? '';

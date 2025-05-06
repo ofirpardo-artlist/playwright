@@ -162,3 +162,77 @@ export function filterForShard(shard: { total: number, current: number }, testGr
   }
   return result;
 }
+
+interface TimingFileEntry {
+  id: string;
+  name: string;
+  duration: number;
+}
+
+interface ShardConfig {
+  total: number;
+  current: number;
+}
+
+export function filterForShardFromTimingFile(
+  timingFile: TimingFileEntry[],
+  shard: ShardConfig,
+  testGroups: TestGroup[]
+): Set<TestGroup> {
+  const testGroupsIds: string[] = timingFile.map((test: TimingFileEntry) => test.id);
+  const recordedTestDetails: TimingFileEntry[] = timingFile.filter((test: TimingFileEntry) => testGroupsIds.includes(test.id));
+  const shardsMapping: TimingFileEntry[][] = mapTestDetailsToShards(recordedTestDetails, shard);
+  const testIds: string[] = shardsMapping[shard.current - 1].map(shardDetails => shardDetails.id);
+  const recordedTests: TestGroup[] = testGroups.filter(group => testIds.includes(group.tests[0].id));
+  const result = new Set<TestGroup>();
+
+  recordedTests.forEach(group => result.add(group));
+
+  // If not all test groups have recorded timing information, filter the remaining groups based on shard distribution
+  if (recordedTestDetails.length !== testGroups.length) {
+    const allTestIds: string[] = timingFile.map(shardDetails => shardDetails.id);
+    const unrecordedTests: TestGroup[] = testGroups.filter(group => !allTestIds.includes(group.tests[0].id));
+
+    let shardableTotal = 0;
+    for (const group of unrecordedTests)
+      shardableTotal += group.tests.length;
+
+    // Each shard gets some tests.
+    const shardSize: number = Math.floor(shardableTotal / shard.total);
+    // First few shards get one more test each.
+    const extraOne: number = shardableTotal - shardSize * shard.total;
+
+    const currentShard: number = shard.current - 1; // Make it zero-based for calculations.
+    const from: number = shardSize * currentShard + Math.min(extraOne, currentShard);
+    const to: number = from + shardSize + (currentShard < extraOne ? 1 : 0);
+
+    let current = 0;
+    for (const group of unrecordedTests) {
+      // Any test group goes to the shard that contains the first test of this group.
+      // So, this shard gets any group that starts at [from; to)
+      if (current >= from && current < to)
+        result.add(group);
+      else
+        current += group.tests.length;
+    }
+  }
+
+  return result;
+}
+
+function mapTestDetailsToShards(testDetails: TimingFileEntry[], shard: ShardConfig): TimingFileEntry[][] {
+  testDetails.sort((a: TimingFileEntry, b: TimingFileEntry) => b.duration - a.duration);
+
+  const result: TimingFileEntry[][] = Array.from({ length: shard.total }, () => []);
+  const sums: number[] = Array(shard.total).fill(0);
+
+  // Distribute tests to shards based on their durations
+  for (const testDetailsObj of testDetails) {
+    // Find the shard with the smallest total duration and assign the test to that shard
+    const minIndex: number = sums.indexOf(Math.min(...sums));
+    result[minIndex].push(testDetailsObj);
+    sums[minIndex] += testDetailsObj.duration;
+  }
+
+  return result;
+}

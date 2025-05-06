@@ -30,10 +30,12 @@ const testTypeSymbol = Symbol('testType');
 
 export class TestTypeImpl {
   readonly fixtures: FixturesWithLocation[];
+  readonly overrides: any;
   readonly test: TestType<any, any>;
 
-  constructor(fixtures: FixturesWithLocation[]) {
+  constructor(fixtures: FixturesWithLocation[], overrides?: any) {
     this.fixtures = fixtures;
+    this.overrides = overrides;
 
     const test: any = wrapFunctionWithLocation(this._createTest.bind(this, 'default'));
     test[testTypeSymbol] = this;
@@ -88,8 +90,14 @@ export class TestTypeImpl {
 
   private _createTest(type: 'default' | 'only' | 'skip' | 'fixme' | 'fail' | 'fail.only', location: Location, title: string, fnOrDetails: Function | TestDetails, fn?: Function) {
     throwIfRunningInsideJest();
-    const suite = this._currentSuite(location, 'test()');
+    let suite = this._currentSuite(location, 'test()');
     if (!suite)
+      return;
+
+    if (this.overrides && this.overrides.extendSuite && typeof this.overrides.extendSuite === 'function')
+      suite = this.overrides.extendSuite(suite);
+
+    if (!suite) // Extra check after potential modification
       return;
 
     let details: TestDetails;
@@ -103,11 +111,18 @@ export class TestTypeImpl {
     }
 
     const validatedDetails = validateTestDetails(details);
-    const test = new TestCase(title, body, this, location);
+    let test = new TestCase(title, body, this, location);
+
+    if (this.overrides && this.overrides.extendTest && typeof this.overrides.extendTest === 'function')
+      test = this.overrides.extendTest(test);
+
     test._requireFile = suite._requireFile;
     test.annotations.push(...validatedDetails.annotations);
     test._tags.push(...validatedDetails.tags);
     suite._addTest(test);
+
+    if (this.overrides && this.overrides.extendDescribeTitle && typeof this.overrides.extendDescribeTitle === 'function')
+      title = this.overrides.extendDescribeTitle(title, suite.titlePath());
 
     if (type === 'only' || type === 'fail.only')
       test._only = true;
@@ -290,11 +305,11 @@ export class TestTypeImpl {
     });
   }
 
-  private _extend(location: Location, fixtures: Fixtures) {
+  private _extend(location: Location, fixtures: Fixtures, overrides: any = {}) {
     if ((fixtures as any)[testTypeSymbol])
       throw new Error(`test.extend() accepts fixtures object, not a test object.\nDid you mean to call mergeTests()?`);
     const fixturesWithLocation: FixturesWithLocation = { fixtures, location };
-    return new TestTypeImpl([...this.fixtures, fixturesWithLocation]).test;
+    return new TestTypeImpl([...this.fixtures, fixturesWithLocation, overrides]).test;
   }
 }
 
