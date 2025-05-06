@@ -6014,7 +6014,7 @@ export interface TestType<TestArgs extends {}, WorkerArgs extends {}> {
    * @param fixtures An object containing fixtures and/or options. Learn more about [fixtures format](https://playwright.dev/docs/test-fixtures).
    * @param overrides
    */
-  extend<T extends {}, W extends {}, TOverrides extends {}>(fixtures: Fixtures<T, W, TestArgs, WorkerArgs>, overrides: TOverrides): TestType<TestArgs & T, WorkerArgs & W>;
+  extend<T extends {}, W extends {}, TOverrides extends {} = {}>(fixtures: Fixtures<T, W, TestArgs, WorkerArgs>, overrides?: TOverrides): TestType<TestArgs & T & TOverrides, WorkerArgs & W>;
   /**
    * Returns information about the currently running test. This method can only be called during the test execution,
    * otherwise it throws.
